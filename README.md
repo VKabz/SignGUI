@@ -12,6 +12,7 @@ Build the fork with **Gradle and JDK 25**, using an unpacked local Leaf 26.3 ins
 The default data path is `../Servers/docker-server/minecraft-data`. It must contain
 `versions/26.3/leaf-26.3.jar`,
 `libraries/cn/dreeam/leaf/leaf-api/26.3.local-SNAPSHOT/leaf-api-26.3.local-SNAPSHOT.jar`,
+`versions/26.2/leaf-26.2.jar` (for the boolean-API wrapper),
 and the server's other libraries. These are compile-only file dependencies.
 Output: `build/libs/signgui-2.5.5-gamai.jar`, also installed as
 `de.rapha149.signgui:signgui:2.5.5-gamai` in Maven Local. This version is not on Maven Central.
@@ -22,12 +23,19 @@ release, so obsolete server artifacts are not needed to build the fork.
 The original Maven module builds remain available for upstream development;
 use Gradle to build this fork including the new `Mojang26_R1` sources.
 
-Minecraft 26.2 selects `MojangWrapper26_2`, which inherits the compatible boolean
-sign-side implementation. Minecraft 26.3 selects `MojangWrapper26_R1`, using
+Minecraft 26.2 selects `MojangWrapper26_2`, which uses the compatible boolean
+sign-side API and shares the safe session lifecycle with the 26.3 wrapper.
+Minecraft 26.3 selects `MojangWrapper26_R1`, using
 `SignTextSlot`, mutable sign text, and record packet accessors. Later unknown
 26.x versions select the latter as a best-effort fallback and need verification
 against their server jars. Both regular Bukkit versions and Paper
-`26.3.build.N-alpha` version strings are recognized.
+`26.3.build.N-alpha` version strings are recognized. Exact patch mappings take
+priority over the minor-version fallback. 26.1 is mapped to the 26.2 boolean API
+as a compatibility assumption; no local 26.1 server jar is available to verify it.
+
+The 26.x wrappers dispatch world/player access to the main server thread and
+pipeline changes to the channel event loop. Pending openings are invalidated by
+newer sessions; closing an older session cannot remove the newer handler.
 
 For a consumer without Maven Local, vendor the jar and keep the usual relocation:
 

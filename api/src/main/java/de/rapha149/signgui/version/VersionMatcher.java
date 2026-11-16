@@ -31,6 +31,7 @@ public class VersionMatcher {
         versions.put("1.21.6", "1_21_R5");
         versions.put("1.21.7", "1_21_R5");
         versions.put("1.21.8", "1_21_R5");
+        versions.put("26.1", "26_2");
         versions.put("26.2", "26_2");
         versions.put("26.3", NEWEST_26_VERSION);
         VERSIONS = Collections.unmodifiableMap(versions);
@@ -81,15 +82,19 @@ public class VersionMatcher {
     }
 
     static String matchVersion(String craftBukkitPackage, String bukkitVersion) {
-        String minecraftVersion = bukkitVersion.split("-")[0];
+        String minecraftVersion = bukkitVersion.split("-")[0].replaceFirst("\\.build\\..*$", "");
         // Paper also reports versions such as 26.3.build.22-alpha.
-        String[] parts = minecraftVersion.split("\\.");
-        if (parts.length >= 2 && "26".equals(parts[0]))
-            minecraftVersion = parts[0] + "." + parts[1];
         return minecraftVersion.startsWith("26.")
-                ? VERSIONS.getOrDefault(minecraftVersion, NEWEST_26_VERSION)
+                ? match26Version(minecraftVersion, VERSIONS)
                 : craftBukkitPackage.contains(".v") ? craftBukkitPackage.split("\\.")[3].substring(1)
                 : VERSIONS.getOrDefault(minecraftVersion, NEWEST_VERSION);
+    }
+
+    static String match26Version(String version, Map<String, String> versions) {
+        String exact = versions.get(version);
+        if (exact != null) return exact;
+        String[] parts = version.split("\\.");
+        return versions.getOrDefault(parts[0] + "." + parts[1], NEWEST_26_VERSION);
     }
 
     private static boolean useMojangMappings(String version) {

@@ -39,6 +39,17 @@ val minecraft26 by sourceSets.creating {
     compileClasspath += sourceSets.main.get().output + legacyWrappers
 }
 
+// Compile the boolean API against 26.2, rather than inheriting the unsafe legacy lifecycle.
+val minecraft26_2 by sourceSets.creating {
+    java.srcDir("Mojang26_2/src/main/java")
+    compileClasspath += sourceSets.main.get().output + minecraft26.output
+}
+
+sourceSets.test {
+    compileClasspath += minecraft26.output + minecraft26.compileClasspath
+    runtimeClasspath += minecraft26.output + minecraft26.compileClasspath
+}
+
 dependencies {
     legacyWrappers("de.rapha149.signgui:signgui:2.5.4")
     compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
@@ -46,11 +57,14 @@ dependencies {
     compileOnly("commons-lang:commons-lang:2.6")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core:5.24.0")
 
     // File dependencies are compileOnly; no server, API or bundled libraries
     // are included in the published SignGUI jar.
     add(minecraft26.compileOnlyConfigurationName, files(serverJar, leafApiJar))
     add(minecraft26.compileOnlyConfigurationName, fileTree("$serverData/libraries") { include("**/*.jar") })
+    add(minecraft26_2.compileOnlyConfigurationName, files("$serverData/versions/26.2/leaf-26.2.jar"))
+    add(minecraft26_2.compileOnlyConfigurationName, fileTree("$serverData/libraries") { include("**/*.jar") })
 }
 
 java {
@@ -63,6 +77,8 @@ tasks.compileJava {
 
 tasks.test {
     useJUnitPlatform()
+    workingDir = layout.buildDirectory.dir("test-work").get().asFile
+    doFirst { workingDir.mkdirs() }
 }
 
 tasks.named<JavaCompile>(minecraft26.compileJavaTaskName) {
@@ -76,8 +92,13 @@ tasks.named<JavaCompile>(minecraft26.compileJavaTaskName) {
     }
 }
 
+tasks.named<JavaCompile>(minecraft26_2.compileJavaTaskName) {
+    options.release.set(21)
+}
+
 tasks.jar {
     from(minecraft26.output)
+    from(minecraft26_2.output)
     from({ legacyWrappers.map { zipTree(it) } }) {
         include("de/rapha149/signgui/version/*Wrapper*.class")
         exclude("de/rapha149/signgui/version/VersionWrapper.class")

@@ -1,15 +1,10 @@
 package de.rapha149.signgui.version;
 
 import de.rapha149.signgui.SignEditor;
-import de.rapha149.signgui.SignGUIChannelHandler;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
 import io.papermc.paper.adventure.AdventureComponent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -26,7 +21,6 @@ import org.bukkit.entity.Player;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 public class MojangWrapper26_R1 implements VersionWrapper {
@@ -71,100 +65,62 @@ public class MojangWrapper26_R1 implements VersionWrapper {
 
     @Override
     public void openSignEditor(Player player, String[] textLines, Object[] adventureLines, Material type, DyeColor color, boolean glow, Location signLoc, BiConsumer<SignEditor, String[]> onFinish) {
-        ServerPlayer p = ((CraftPlayer) player).getHandle();
-        ServerGamePacketListenerImpl conn = p.connection;
+        MojangSignSession.onMain(() -> {
+            if (!player.isOnline()) return;
+            ServerPlayer p = ((CraftPlayer) player).getHandle();
+            ServerGamePacketListenerImpl conn = p.connection;
 
-        Location loc = signLoc != null ? signLoc : getDefaultLocation(player);
-        BlockPos pos = new BlockPos(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+            Location loc = signLoc != null ? signLoc : getDefaultLocation(player);
+            BlockPos pos = new BlockPos(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
 
-        SignBlockEntity sign = new SignBlockEntity(pos, Blocks.OAK_SIGN.defaultBlockState());
-        SignText.Mutable signText = sign.getText(SignTextSlot.FRONT).asMutable()
-                .setColor(net.minecraft.world.item.DyeColor.valueOf(color.toString()))
-                .setTextGlowing(glow);
+            SignBlockEntity sign = new SignBlockEntity(pos, Blocks.OAK_SIGN.defaultBlockState());
+            SignText.Mutable signText = sign.getText(SignTextSlot.FRONT).asMutable()
+                    .setColor(net.minecraft.world.item.DyeColor.valueOf(color.toString()))
+                    .setTextGlowing(glow);
 
-        Component[] lines = createLines(textLines, adventureLines);
-        for (int i = 0; i < lines.length; i++)
-            signText.setLine(i, lines[i]);
-        sign.setText(signText.asImmutable(), SignTextSlot.FRONT);
+            Component[] lines = createLines(textLines, adventureLines);
+            for (int i = 0; i < lines.length; i++)
+                signText.setLine(i, lines[i]);
+            sign.setText(signText.asImmutable(), SignTextSlot.FRONT);
 
-        boolean schedule = false;
-        Connection manager = conn.connection;
-        ChannelPipeline pipeline = manager.channel.pipeline();
-        if (pipeline.names().contains("SignGUI")) {
-            ChannelHandler handler = pipeline.get("SignGUI");
-            if (handler instanceof SignGUIChannelHandler<?> signGUIHandler) {
-                signGUIHandler.close();
-                schedule = signGUIHandler.getBlockPosition().equals(pos);
-            }
-
-            if (pipeline.names().contains("SignGUI"))
-                pipeline.remove("SignGUI");
-        }
-
-        Runnable runnable = () -> {
-            player.sendBlockChange(loc, type.createBlockData());
-            sign.setLevel(p.level());
-            conn.send(sign.getUpdatePacket());
-            sign.setLevel(null);
-            conn.send(new ClientboundOpenSignEditorPacket(pos, SignTextSlot.FRONT));
-
-            SignEditor signEditor = new SignEditor(sign, loc, pos, pipeline);
-            pipeline.addAfter("decoder", "SignGUI", new SignGUIChannelHandler<Packet<?>>() {
-
-                @Override
-                public Object getBlockPosition() {
-                    return pos;
-                }
-
-                @Override
-                public void close() {
-                    closeSignEditor(player, signEditor);
-                }
-
-                @Override
-                protected void decode(ChannelHandlerContext chc, Packet<?> packet, List<Object> out) {
-                    try {
-                        if (packet instanceof ServerboundSignUpdatePacket updateSign) {
-                            if (updateSign.pos().equals(pos) && updateSign.slot() == SignTextSlot.FRONT)
-                                onFinish.accept(signEditor, updateSign.lines().toArray(new String[0]));
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-
-                    out.add(packet);
-                }
-            });
-        };
-
-        if (schedule)
-            SCHEDULER.schedule(runnable, 200, TimeUnit.MILLISECONDS);
-        else
-            runnable.run();
+            Connection manager = conn.connection;
+            SignEditor editor = new SignEditor(sign, loc, pos, manager.channel.pipeline());
+            MojangSignSession.open(player, manager::isConnected, editor, () -> {
+                player.sendBlockChange(loc, type.createBlockData());
+                sign.setLevel(p.level());
+                conn.send(sign.getUpdatePacket());
+                sign.setLevel(null);
+                conn.send(new ClientboundOpenSignEditorPacket(pos, SignTextSlot.FRONT));
+            }, packet -> packet instanceof ServerboundSignUpdatePacket update
+                    && update.pos().equals(pos) && update.slot() == SignTextSlot.FRONT
+                    ? update.lines().toArray(new String[0]) : null, onFinish);
+        });
     }
 
     @Override
     public void displayNewLines(Player player, SignEditor signEditor, String[] textLines, Object[] adventureLines) {
-        SignBlockEntity sign = (SignBlockEntity)signEditor.getSign();
+        MojangSignSession.onMain(() -> {
+            if (!MojangSignSession.isCurrent(player, signEditor)) return;
+            SignBlockEntity sign = (SignBlockEntity)signEditor.getSign();
 
-        SignText.Mutable newSignText = sign.getText(SignTextSlot.FRONT).asMutable();
-        Component[] lines = createLines(textLines, adventureLines);
-        for (int i = 0; i < lines.length; ++i)
-            newSignText.setLine(i, lines[i]);
-        sign.setText(newSignText.asImmutable(), SignTextSlot.FRONT);
+            SignText.Mutable newSignText = sign.getText(SignTextSlot.FRONT).asMutable();
+            Component[] lines = createLines(textLines, adventureLines);
+            for (int i = 0; i < lines.length; ++i)
+                newSignText.setLine(i, lines[i]);
+            sign.setText(newSignText.asImmutable(), SignTextSlot.FRONT);
 
-        ServerPlayer p = ((CraftPlayer)player).getHandle();
-        ServerGamePacketListenerImpl conn = p.connection;
-        sign.setLevel(p.level());
-        conn.send(sign.getUpdatePacket());
-        sign.setLevel(null);
-        conn.send(new ClientboundOpenSignEditorPacket((BlockPos)signEditor.getBlockPosition(), SignTextSlot.FRONT));
+            ServerPlayer p = ((CraftPlayer)player).getHandle();
+            ServerGamePacketListenerImpl conn = p.connection;
+            sign.setLevel(p.level());
+            conn.send(sign.getUpdatePacket());
+            sign.setLevel(null);
+            conn.send(new ClientboundOpenSignEditorPacket((BlockPos)signEditor.getBlockPosition(), SignTextSlot.FRONT));
+            MojangSignSession.acceptNext(signEditor);
+        });
     }
 
     @Override
     public void closeSignEditor(Player player, SignEditor signEditor) {
-        Location loc = signEditor.getLocation();
-        signEditor.getPipeline().remove("SignGUI");
-        player.sendBlockChange(loc, loc.getBlock().getBlockData());
+        MojangSignSession.close(player, signEditor);
     }
 }
