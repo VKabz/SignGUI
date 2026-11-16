@@ -2,7 +2,10 @@
 *.iml
 target/
 test/
+!src/test/
 dependency-reduced-pom.xml
 .mvn/
 .flattened-pom.xml
 .paper-nms/
+.gradle/
+build/

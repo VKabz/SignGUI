@@ -1,16 +1,54 @@
-# SignGUI [![Build](https://github.com/Rapha149/SignGUI/actions/workflows/build.yml/badge.svg)](https://github.com/Rapha149/SignGUI/actions/workflows/build.yml) [![Maven Central](https://img.shields.io/maven-central/v/de.rapha149.signgui/signgui?label=Maven%20Central)](https://central.sonatype.com/artifact/de.rapha149.signgui/signgui) [![Javadoc](https://javadoc.io/badge2/de.rapha149.signgui/signgui/Javadoc.svg)](https://javadoc.io/doc/de.rapha149.signgui/signgui) 
+# SignGUI — Gamai fork
+
+Fork of [Rapha149/SignGUI](https://github.com/Rapha149/SignGUI), version `2.5.5-gamai`.
+Adds Mojang-mapped Minecraft 26.2 and 26.3 support without changing the public API.
+
+Build the fork with **Gradle and JDK 25**, using an unpacked local Leaf 26.3 installation:
+
+```sh
+./gradlew clean build publishToMavenLocal -PminecraftData=/path/to/minecraft-data
+```
+
+The default data path is `../Servers/docker-server/minecraft-data`. It must contain
+`versions/26.3/leaf-26.3.jar`,
+`libraries/cn/dreeam/leaf/leaf-api/26.3.local-SNAPSHOT/leaf-api-26.3.local-SNAPSHOT.jar`,
+and the server's other libraries. These are compile-only file dependencies.
+Output: `build/libs/signgui-2.5.5-gamai.jar`, also installed as
+`de.rapha149.signgui:signgui:2.5.5-gamai` in Maven Local. This version is not on Maven Central.
+
+The API/shared wrapper classes are rebuilt from source with Java 8 bytecode.
+Unchanged older NMS wrappers are copied byte-for-byte from the upstream `2.5.4`
+release, so obsolete server artifacts are not needed to build the fork.
+The original Maven module builds remain available for upstream development;
+use Gradle to build this fork including the new `Mojang26_R1` sources.
+
+Minecraft 26.2 selects `MojangWrapper26_2`, which inherits the compatible boolean
+sign-side implementation. Minecraft 26.3 selects `MojangWrapper26_R1`, using
+`SignTextSlot`, mutable sign text, and record packet accessors. Later unknown
+26.x versions select the latter as a best-effort fallback and need verification
+against their server jars. Both regular Bukkit versions and Paper
+`26.3.build.N-alpha` version strings are recognized.
+
+For a consumer without Maven Local, vendor the jar and keep the usual relocation:
+
+```kotlin
+implementation(files("libs/signgui-2.5.5-gamai.jar"))
+```
+
+## Upstream documentation
+
 An api to get input text via a sign in Minecraft.  
 The api supports the Minecraft versions from `1.8` to `1.21`.  
 Also supports adventure text and mojang-mapped Paper plugins (1.20.5+).
 
 ## Integration
 
-Maven dependency:
+Maven dependency (add Maven Local to the consumer's repositories):
 ```xml
 <dependency>
     <groupId>de.rapha149.signgui</groupId>
     <artifactId>signgui</artifactId>
-    <version>2.5.4</version>
+    <version>2.5.5-gamai</version>
 </dependency>
 ```
 

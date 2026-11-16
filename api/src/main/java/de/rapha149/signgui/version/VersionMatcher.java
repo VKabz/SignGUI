@@ -15,6 +15,7 @@ public class VersionMatcher {
 
     private static final Map<String, String> VERSIONS;
     private static final String NEWEST_VERSION = "1_21_R5";
+    private static final String NEWEST_26_VERSION = "26_R1";
 
     private static boolean initialized;
     private static VersionWrapper wrapper;
@@ -30,6 +31,8 @@ public class VersionMatcher {
         versions.put("1.21.6", "1_21_R5");
         versions.put("1.21.7", "1_21_R5");
         versions.put("1.21.8", "1_21_R5");
+        versions.put("26.2", "26_2");
+        versions.put("26.3", NEWEST_26_VERSION);
         VERSIONS = Collections.unmodifiableMap(versions);
     }
 
@@ -58,8 +61,7 @@ public class VersionMatcher {
      */
     private static VersionWrapper initWrapper() throws SignGUIVersionException {
         String craftBukkitPackage = Bukkit.getServer().getClass().getPackage().getName();
-        String version = craftBukkitPackage.contains(".v") ? craftBukkitPackage.split("\\.")[3].substring(1) :
-                VERSIONS.getOrDefault(Bukkit.getBukkitVersion().split("-")[0], NEWEST_VERSION);
+        String version = matchVersion(craftBukkitPackage, Bukkit.getBukkitVersion());
 
         final String className;
         if (useMojangMappings(version)) {
@@ -78,7 +80,23 @@ public class VersionMatcher {
         }
     }
 
+    static String matchVersion(String craftBukkitPackage, String bukkitVersion) {
+        String minecraftVersion = bukkitVersion.split("-")[0];
+        // Paper also reports versions such as 26.3.build.22-alpha.
+        String[] parts = minecraftVersion.split("\\.");
+        if (parts.length >= 2 && "26".equals(parts[0]))
+            minecraftVersion = parts[0] + "." + parts[1];
+        return minecraftVersion.startsWith("26.")
+                ? VERSIONS.getOrDefault(minecraftVersion, NEWEST_26_VERSION)
+                : craftBukkitPackage.contains(".v") ? craftBukkitPackage.split("\\.")[3].substring(1)
+                : VERSIONS.getOrDefault(minecraftVersion, NEWEST_VERSION);
+    }
+
     private static boolean useMojangMappings(String version) {
+        // Minecraft 26.x is distributed with Mojang names, including CraftBukkit.
+        if (version.startsWith("26_"))
+            return true;
+
         try {
             Class.forName("com.destroystokyo.paper.ParticleBuilder");
         } catch (ClassNotFoundException ignored) {
